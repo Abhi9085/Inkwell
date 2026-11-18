@@ -246,10 +246,6 @@ export function useFollowListSocket(
     return () => {
       active = false;
 
-      if (socket.connected) {
-        socket.emit("user:leave", userId);
-      }
-
       socket.off("connect", joinUserRoom);
       socket.off("follow:created", handleFollowCreated);
       socket.off("follow:deleted", handleFollowDeleted);

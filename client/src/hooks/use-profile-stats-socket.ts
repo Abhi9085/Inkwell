@@ -61,11 +61,7 @@ export function useProfileStatsSocket(userId: number | null) {
 
     return () => {
       active = false;
-
-      if (socket.connected) {
-        socket.emit("profile:leave", userId);
-      }
-
+      
       socket.off("connect", joinProfileRoom);
       socket.off("profile:stats-updated", handleStatsUpdate);
     };

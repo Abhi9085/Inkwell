@@ -90,6 +90,8 @@ const io = new Server(httpServer, {
     origin: allowedOrigins,
     credentials: true,
   },
+  pingInterval: 25000,
+  pingTimeout: 60000,
 });
 
 // Authenticate Socket.IO connections when a token is supplied. Anonymous

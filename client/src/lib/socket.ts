@@ -22,6 +22,8 @@ const readAccessToken = () => {
   return window.localStorage.getItem("token");
 };
 
+console.log("[Socket] Connecting to:", socketUrl);
+
 export const socket = io(socketUrl, {
   autoConnect: false,
   transports: ["websocket"],

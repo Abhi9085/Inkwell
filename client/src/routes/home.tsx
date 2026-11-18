@@ -1,7 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { BookOpen, Lightbulb, Sparkles, TrendingUp } from "lucide-react";
-import { Navbar } from "@/components/navbar";
+import { BookOpen, Lightbulb, Sparkles, TrendingUp } from "lucide-react";                                                      
 import { PostCard } from "@/components/post-card";
 import api from "../lib/api";
 import type { Post, Author } from "@/lib/types";
@@ -59,8 +58,8 @@ function HomePage() {
   useEffect(() => {
     const fetchFeed = async () => {
       try {
-        const response = await api.get("/posts");
-        const fetchedPosts: Post[] = response.data;
+        const response = await api.get("/posts/feed", { params: { limit: 30 } });
+        const fetchedPosts: Post[] = response.data.posts ?? [];
 
         setPosts(fetchedPosts);
 
@@ -82,10 +81,13 @@ function HomePage() {
           );
         } catch (error) {
           // Public or unauthenticated visitors can still see the feed.
-          console.warn(
-            "Personalized feed unavailable; using published posts.",
-            error
-          );
+          console.warn("Personalized feed unavailable; using public discovery.", error);
+          try {
+            const discovery = await api.get("/posts/discover", { params: { sort: "trending", limit: 5 } });
+            setTrendingPosts(discovery.data.posts ?? fetchedPosts.slice(1, 5));
+          } catch (discoveryError) {
+            console.warn("Discovery fallback unavailable.", discoveryError);
+          }
         }
       } catch (error) {
         console.error("Failed to fetch feed", error);
@@ -138,7 +140,6 @@ function HomePage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar variant="app" />
 
       <main className="container-page py-8">
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">

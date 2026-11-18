@@ -1,4 +1,29 @@
 // Routes for auth. Keep route handlers in this feature module.
+const EMAIL_RE = /^[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?(?:\.[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?)+$/i;
+const normalizeEmail = (value) => String(value || "").trim().toLowerCase();
+const readCookie = (req, name) => {
+  const header = req.headers.cookie || "";
+  const item = header.split(";").map((part) => part.trim()).find((part) => part.startsWith(`${name}=`));
+  if (!item) return null;
+  try { return decodeURIComponent(item.slice(name.length + 1)); }
+  catch { return null; }
+};
+const isAllowedBrowserOrigin = (req) => {
+  const origin = req.headers.origin;
+  if (!origin) return true;
+  const allowed = (process.env.CORS_ORIGIN || "http://localhost:5173,http://localhost:3000").split(",").map((value) => value.trim());
+  return allowed.includes(origin);
+};
+const refreshCookieOptions = () => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+  path: "/api/auth",
+  maxAge: 30 * 24 * 60 * 60 * 1000,
+});
+const clearRefreshCookie = (res) => res.clearCookie("inkwell_refresh", {
+  httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: process.env.NODE_ENV === "production" ? "none" : "lax", path: "/api/auth",
+});
 module.exports = function registerAuthRoutes(app, deps) {
   const {
     pool,
@@ -14,8 +39,21 @@ module.exports = function registerAuthRoutes(app, deps) {
     mailer,
   } = deps;
 
+  const issueSession = async (res, userId) => {
+    const accessToken = jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: process.env.ACCESS_TOKEN_TTL || "15m" });
+    const refreshToken = crypto.randomBytes(48).toString("base64url");
+    const tokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex");
+    await pool.query(
+      `INSERT INTO refresh_sessions (user_id, token_hash, expires_at) VALUES ($1, $2, NOW() + INTERVAL '30 days')`,
+      [userId, tokenHash]
+    );
+    res.cookie("inkwell_refresh", refreshToken, refreshCookieOptions());
+    return accessToken;
+  };
+
   app.post("/api/auth/register", async (req, res) => {
-    const { name, handle, email, password } = req.body;
+    const { name, handle, password } = req.body || {};
+    const email = normalizeEmail(req.body?.email);
 
     if (!name || !handle || !email || !password) {
       return res.status(400).json({
@@ -23,10 +61,17 @@ module.exports = function registerAuthRoutes(app, deps) {
       });
     }
 
+    if (typeof name !== "string" || name.trim().length < 2 || name.trim().length > 80 ||
+        typeof handle !== "string" || !/^[a-zA-Z0-9_]{3,30}$/.test(handle) ||
+        !EMAIL_RE.test(email) || email.length > 254 ||
+        typeof password !== "string" || password.length < 12 || password.length > 72 ||
+        !/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/[0-9]/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
+      return res.status(400).json({ error: "Use a valid name, a 3–30 character handle, a valid email, and a password of 12–72 characters containing uppercase, lowercase, number and symbol." });
+    }
+
     try {
       const existingUser = await pool.query(
-        `SELECT id FROM users WHERE email = $1 OR handle = $2`,
-
+        `SELECT id FROM users WHERE LOWER(email) = $1 OR LOWER(handle) = LOWER($2)`,
         [email, handle]
       );
 
@@ -36,7 +81,7 @@ module.exports = function registerAuthRoutes(app, deps) {
         });
       }
 
-      const hashedPassword = await bcrypt.hash(password, 10);
+      const hashedPassword = await bcrypt.hash(password, 12);
 
       const newUser = await pool.query(
         `
@@ -69,9 +114,10 @@ module.exports = function registerAuthRoutes(app, deps) {
   });
 
   app.post("/api/auth/login", async (req, res) => {
-    const { email, password } = req.body;
+    const email = normalizeEmail(req.body?.email);
+    const password = req.body?.password;
 
-    if (!email || !password) {
+    if (!email || !password || !EMAIL_RE.test(email) || email.length > 254 || typeof password !== "string" || password.length > 72) {
       return res.status(400).json({
         error: "Email and password are required",
       });
@@ -90,7 +136,7 @@ module.exports = function registerAuthRoutes(app, deps) {
           bio,
           role
         FROM users
-        WHERE email = $1
+        WHERE LOWER(email) = $1
         `,
         [email]
       );
@@ -114,11 +160,7 @@ module.exports = function registerAuthRoutes(app, deps) {
         });
       }
 
-      const token = jwt.sign(
-        { id: user.id },
-        process.env.JWT_SECRET,
-        { expiresIn: "24h" }
-      );
+      const token = await issueSession(res, user.id);
 
       res.json({
         token,
@@ -214,7 +256,7 @@ module.exports = function registerAuthRoutes(app, deps) {
 
         // password_hash requirement remains compatible.
         const randomPassword = crypto.randomBytes(32).toString("hex");
-        const passwordHash = await bcrypt.hash(randomPassword, 10);
+        const passwordHash = await bcrypt.hash(randomPassword, 12);
         result = await pool.query(
           `
           INSERT INTO users (
@@ -237,11 +279,7 @@ module.exports = function registerAuthRoutes(app, deps) {
       }
 
       // Issue the same Inkwell JWT used by normal login.
-      const token = jwt.sign(
-        { id: user.id },
-        process.env.JWT_SECRET,
-        { expiresIn: "24h" }
-      );
+      const token = await issueSession(res, user.id);
 
       return res.json({
         token,
@@ -264,6 +302,58 @@ module.exports = function registerAuthRoutes(app, deps) {
     }
   });
 
+  app.post("/api/auth/refresh", async (req, res) => {
+    if (!isAllowedBrowserOrigin(req)) return res.status(403).json({ error: "Origin not allowed" });
+    const rawToken = readCookie(req, "inkwell_refresh");
+    if (!rawToken || rawToken.length > 256) return res.status(401).json({ error: "Refresh session required" });
+    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+    let client;
+    try {
+      client = await pool.connect();
+      await client.query("BEGIN");
+      const found = await client.query(
+        `SELECT id, user_id FROM refresh_sessions WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > NOW() FOR UPDATE`,
+        [tokenHash]
+      );
+      if (!found.rows.length) {
+        await client.query("ROLLBACK"); clearRefreshCookie(res);
+        return res.status(401).json({ error: "Refresh session expired or revoked" });
+      }
+      await client.query("UPDATE refresh_sessions SET revoked_at = NOW() WHERE id = $1", [found.rows[0].id]);
+      const nextRefresh = crypto.randomBytes(48).toString("base64url");
+      const nextHash = crypto.createHash("sha256").update(nextRefresh).digest("hex");
+      await client.query(
+        `INSERT INTO refresh_sessions (user_id, token_hash, expires_at) VALUES ($1, $2, NOW() + INTERVAL '30 days')`,
+        [found.rows[0].user_id, nextHash]
+      );
+      await client.query("COMMIT");
+      res.cookie("inkwell_refresh", nextRefresh, refreshCookieOptions());
+      const token = jwt.sign({ id: found.rows[0].user_id }, process.env.JWT_SECRET, { expiresIn: process.env.ACCESS_TOKEN_TTL || "15m" });
+      return res.json({ token });
+    } catch (error) {
+      if (client) await client.query("ROLLBACK").catch(() => {});
+      console.error("Refresh session error:", error);
+      return res.status(500).json({ error: "Unable to refresh session" });
+    } finally { client?.release(); }
+  });
+
+  app.post("/api/auth/logout", async (req, res) => {
+    if (!isAllowedBrowserOrigin(req)) return res.status(403).json({ error: "Origin not allowed" });
+    const rawToken = readCookie(req, "inkwell_refresh");
+    try {
+      if (rawToken) {
+        const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+        await pool.query(`UPDATE refresh_sessions SET revoked_at = NOW() WHERE token_hash = $1 AND revoked_at IS NULL`, [tokenHash]);
+      }
+      clearRefreshCookie(res);
+      return res.json({ message: "Logged out" });
+    } catch (error) {
+      console.error("Logout error:", error);
+      clearRefreshCookie(res);
+      return res.status(500).json({ error: "Unable to log out" });
+    }
+  });
+
   app.post("/api/auth/forgot-password", async (req, res) => {
     const genericMessage =
       "If an account exists for that email, a reset link will be sent.";
@@ -272,7 +362,7 @@ module.exports = function registerAuthRoutes(app, deps) {
       .trim()
       .toLowerCase();
 
-    if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    if (!email || email.length > 254 || !EMAIL_RE.test(email)) {
       return res.status(200).json({ message: genericMessage });
     }
 
@@ -367,11 +457,13 @@ module.exports = function registerAuthRoutes(app, deps) {
       typeof token !== "string" ||
       token.length !== 64 ||
       typeof password !== "string" ||
-      password.length < 8 ||
-      password.length > 128
+      password.length < 12 ||
+      password.length > 72 ||
+      !/[a-z]/.test(password) || !/[A-Z]/.test(password) ||
+      !/[0-9]/.test(password) || !/[^A-Za-z0-9]/.test(password)
     ) {
       return res.status(400).json({
-        error: "Use a valid reset link and a password between 8 and 128 characters.",
+        error: "Use a valid reset link and a 12–72 character password with uppercase, lowercase, number and symbol.",
       });
     }
   
@@ -406,7 +498,7 @@ module.exports = function registerAuthRoutes(app, deps) {
       }
     
       const reset = result.rows[0];
-      const passwordHash = await bcrypt.hash(password, 10);
+      const passwordHash = await bcrypt.hash(password, 12);
     
       await client.query(
         `
@@ -428,6 +520,11 @@ module.exports = function registerAuthRoutes(app, deps) {
         [reset.user_id]
       );
     
+      await client.query(
+        `UPDATE refresh_sessions SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL`,
+        [reset.user_id]
+      );
+
       await client.query("COMMIT");
     
       return res.json({

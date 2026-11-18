@@ -23,7 +23,7 @@ module.exports = function registerUsersRoutes(app, deps) {
     if (scheme !== "Bearer" || !token) return null;
 
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ["HS256"] });
       return Number(decoded.id);
     } catch {
       return null;

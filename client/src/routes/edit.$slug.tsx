@@ -6,6 +6,7 @@ import type { Post } from "@/lib/types";
 import { PostEditor } from "./create";
 
 export const Route = createFileRoute("/edit/$slug")({
+  ssr: false,
   loader: async ({ params }) => {
     try {
       const response = await api.get(
@@ -53,6 +54,7 @@ function EditPage() {
         category: post.category,
         status: post.status,
         slug: post.slug,
+        tags: post.tags ?? [],
       }}
       lastSavedAt="Recently"
     />

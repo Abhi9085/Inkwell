@@ -27,6 +27,7 @@ export function Navbar({
   const navigate = useNavigate();
 
   const [user, setUser] = useState<any>(null);
+  const [authReady, setAuthReady] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -79,8 +80,18 @@ export function Navbar({
       }
     };
 
+    const handleNotificationsUpdated = () => {
+      if (active) {
+        void fetchNotifications();
+      }
+    };
+
     socket.on("connect", joinUserRoom);
     socket.on("notification:new", handleNewNotification);
+    window.addEventListener(
+      "notifications-updated",
+      handleNotificationsUpdated
+    );
 
     connectSocket();
 
@@ -90,9 +101,13 @@ export function Navbar({
 
     return () => {
       active = false;
-    
       socket.off("connect", joinUserRoom);
       socket.off("notification:new", handleNewNotification);
+    
+      window.removeEventListener(
+        "notifications-updated",
+        handleNotificationsUpdated
+      );
     };
   }, [user?.id, fetchNotifications]);
 
@@ -100,18 +115,21 @@ export function Navbar({
   useEffect(() => {
     const loadUser = () => {
       const storedUser = localStorage.getItem("user");
-
+    
       if (!storedUser) {
         setUser(null);
+        setAuthReady(true);
         return;
       }
-
+    
       try {
         setUser(JSON.parse(storedUser));
       } catch {
         localStorage.removeItem("user");
         setUser(null);
       }
+    
+      setAuthReady(true);
     };
 
     loadUser();
@@ -125,10 +143,11 @@ export function Navbar({
     };
   }, []);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
       if (user?.id && socket.connected) {
         socket.emit("user:leave", user.id);
       }
+      try { await api.post("/auth/logout"); } catch (error) { console.warn("Server logout failed; clearing local session", error); }
     localStorage.removeItem("token");
     localStorage.removeItem("user");
 
@@ -229,7 +248,7 @@ export function Navbar({
             )}
           </button>
 
-          {user ? (
+          {!authReady ? null : user ? (
             <>
               <div className="relative">
                 <button
@@ -243,7 +262,12 @@ export function Navbar({
                   <Bell className="h-4 w-4" />
                 
                   {unreadCount > 0 && (
-                    <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-accent" />
+                    <span
+                      className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-background"
+                      aria-label={`${unreadCount} unread notifications`}
+                    >
+                      {unreadCount > 99 ? "99+" : unreadCount}
+                    </span>
                   )}
                 </button>
               </div>

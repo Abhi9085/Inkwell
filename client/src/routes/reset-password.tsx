@@ -35,8 +35,10 @@ function ResetPasswordPage() {
       return;
     }
 
-    if (password.length < 8 || password.length > 128) {
-      toast.error("Your password must be between 8 and 128 characters.");
+    if (password.length < 12 || password.length > 72 ||
+        !/[a-z]/.test(password) || !/[A-Z]/.test(password) ||
+        !/[0-9]/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
+      toast.error("Use 12–72 characters with uppercase, lowercase, a number and a symbol.");
       return;
     }
 

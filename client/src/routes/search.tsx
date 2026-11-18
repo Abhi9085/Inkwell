@@ -20,6 +20,13 @@ function SearchPage() {
 
   const [query, setQuery] = useState(initialQuery);
   const [searching, setSearching] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [sort, setSort] = useState<"relevance" | "recent" | "popular">("relevance");
+  const [category, setCategory] = useState("");
+  const [tag, setTag] = useState("");
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [total, setTotal] = useState(0);
 
   const [posts, setPosts] = useState<Post[]>([]);
   const [users, setUsers] = useState<UserSummary[]>([]);
@@ -32,30 +39,39 @@ function SearchPage() {
     if (!initialQuery.trim()) {
       setPosts([]);
       setUsers([]);
+      setHasMore(false);
+      setTotal(0);
       return;
     }
 
+    let active = true;
     const performSearch = async () => {
-      setSearching(true);
+      if (page === 1) setSearching(true);
+      else setLoadingMore(true);
 
       try {
         const response = await api.get("/search", {
-          params: {
-            q: initialQuery,
-          },
+          params: { q: initialQuery, page, limit: 20, sort, category, tag },
         });
-
-        setPosts(response.data.posts);
-        setUsers(response.data.users);
+        if (!active) return;
+        const nextPosts: Post[] = response.data.posts ?? [];
+        setPosts((current) => page === 1 ? nextPosts : [...current, ...nextPosts]);
+        if (page === 1) setUsers(response.data.users ?? []);
+        setHasMore(Boolean(response.data.hasMore));
+        setTotal(Number(response.data.total) || 0);
       } catch (error) {
-        console.error("Search failed:", error);
+        if (active) console.error("Search failed:", error);
       } finally {
-        setSearching(false);
+        if (active) {
+          setSearching(false);
+          setLoadingMore(false);
+        }
       }
     };
 
     performSearch();
-  }, [initialQuery]);
+    return () => { active = false; };
+  }, [initialQuery, page, sort, category, tag]);
 
   const handleSearch = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -93,6 +109,26 @@ function SearchPage() {
             <h1 className="mt-12 text-2xl font-semibold">
               Search results for "{initialQuery}"
             </h1>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-3">
+              <label className="text-sm">
+                <span className="mb-1 block text-muted-foreground">Sort by</span>
+                <select value={sort} onChange={(event) => { setSort(event.target.value as typeof sort); setPage(1); }} className="w-full rounded-lg border border-border bg-background px-3 py-2">
+                  <option value="relevance">Relevance</option>
+                  <option value="recent">Most recent</option>
+                  <option value="popular">Most liked</option>
+                </select>
+              </label>
+              <label className="text-sm">
+                <span className="mb-1 block text-muted-foreground">Category</span>
+                <input value={category} onChange={(event) => { setCategory(event.target.value); setPage(1); }} placeholder="Filter category" className="w-full rounded-lg border border-border bg-background px-3 py-2" maxLength={60} />
+              </label>
+              <label className="text-sm">
+                <span className="mb-1 block text-muted-foreground">Tag</span>
+                <input value={tag} onChange={(event) => { setTag(event.target.value); setPage(1); }} placeholder="Filter tag" className="w-full rounded-lg border border-border bg-background px-3 py-2" maxLength={40} />
+              </label>
+            </div>
+            <p className="mt-3 text-xs text-muted-foreground">{total} matching stories</p>
 
             {searching ? (
               <p className="mt-8 text-sm text-muted-foreground">
@@ -166,6 +202,14 @@ function SearchPage() {
                     </p>
                   )}
                 </section>
+
+                {hasMore && (
+                  <div className="mt-8 flex justify-center">
+                    <button type="button" disabled={loadingMore} onClick={() => setPage((current) => current + 1)} className="rounded-full border border-border px-5 py-2 text-sm font-medium hover:bg-secondary disabled:opacity-50">
+                      {loadingMore ? "Loading..." : "Load more stories"}
+                    </button>
+                  </div>
+                )}
 
                 {users.length === 0 && posts.length === 0 && (
                   <div className="py-16 text-center">

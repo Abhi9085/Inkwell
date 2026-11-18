@@ -2,8 +2,6 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Bookmark, BookOpen } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-
-import { Navbar } from "@/components/navbar";
 import { PostCard } from "@/components/post-card";
 import api from "@/lib/api";
 import type { Post } from "@/lib/types";
@@ -52,7 +50,6 @@ function LibraryPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar variant="app" />
 
       <main className="container-page py-12">
         <div className="flex items-center gap-4">

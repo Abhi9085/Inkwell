@@ -35,6 +35,13 @@ function SignupPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    if (formData.password.length < 12 || formData.password.length > 72 ||
+        !/[a-z]/.test(formData.password) || !/[A-Z]/.test(formData.password) ||
+        !/[0-9]/.test(formData.password) || !/[^A-Za-z0-9]/.test(formData.password)) {
+      toast.error("Use 12–72 characters with uppercase, lowercase, a number and a symbol.");
+      return;
+    }
+
     if (formData.password !== formData.confirmPassword) {
       toast.error("Passwords do not match");
       return;
@@ -44,7 +51,8 @@ function SignupPage() {
 
     try {
       // Auto-generate a handle for the database since the UI doesn't ask for one
-      const generatedHandle = formData.name.toLowerCase().replace(/[^a-z0-9]/g, '') + Math.floor(Math.random() * 1000);
+      const handleBase = formData.name.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 26) || 'writer';
+      const generatedHandle = handleBase + Math.floor(Math.random() * 1000);
       
       await api.post('/auth/register', {
         name: formData.name,

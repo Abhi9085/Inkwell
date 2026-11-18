@@ -51,6 +51,7 @@ type PostEditorProps = {
     category?: string;
     status?: PostStatus;
     slug?: string;
+    tags?: string[];
   };
   lastSavedAt?: string;
 };
@@ -164,6 +165,33 @@ export function PostEditor({ mode, postId, initial, lastSavedAt }: PostEditorPro
   const [cover, setCover] = useState<string | null>(initial?.cover ?? null);
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [category, setCategory] = useState(initial?.category ?? "General");
+
+  const [tags, setTags] = useState<string[]>(initial?.tags ?? []);
+  const [tagInput, setTagInput] = useState("");
+
+  const addTag = () => {
+    const tag = tagInput.trim().replace(/^#+/, "").toLowerCase();
+
+    if (!tag) return;
+    if (tags.includes(tag)) {
+      toast.error("This tag already exists.");
+      return;
+    }
+    if (tags.length >= 5) {
+      toast.error("You can add up to 5 tags.");
+      return;
+    }
+
+    setTags((prev) => [...prev, tag]);
+    setTagInput("");
+    setDirty(true);
+  };
+
+  const removeTag = (tagToRemove: string) => {
+    setTags((prev) => prev.filter((tag) => tag !== tagToRemove));
+    setDirty(true);
+  };
+
   const [status, setStatus] = useState<PostStatus>(initial?.status ?? "Draft");
   const [dirty, setDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -264,6 +292,7 @@ export function PostEditor({ mode, postId, initial, lastSavedAt }: PostEditorPro
     formData.append("title", title.trim());
     formData.append("content", body);
     formData.append("category", category);
+    formData.append("tags", JSON.stringify(tags));
     formData.append("status", saveStatus);
     formData.append("slug", generatedSlug);
     formData.append("excerpt", generatedExcerpt);
@@ -373,6 +402,63 @@ export function PostEditor({ mode, postId, initial, lastSavedAt }: PostEditorPro
             <div className="space-y-3">
               <div><label htmlFor="post-category" className="mb-1.5 block text-xs text-muted-foreground">Category</label><select id="post-category" value={category} onChange={(event) => { setCategory(event.target.value); setDirty(true); }} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus:border-ring focus:ring-4 focus:ring-ring/15">{POST_CATEGORIES.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
               <div><label htmlFor="post-status" className="mb-1.5 block text-xs text-muted-foreground">Status</label><select id="post-status" value={status} onChange={(event) => { setStatus(event.target.value as PostStatus); setDirty(true); }} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus:border-ring focus:ring-4 focus:ring-ring/15"><option value="Draft">Draft</option><option value="Public">Public</option></select></div>
+                <div>
+                  <label
+                    htmlFor="post-tags"
+                    className="mb-1.5 block text-xs text-muted-foreground"
+                  >
+                    Tags (up to 5)
+                  </label>
+
+                  <div className="flex gap-2">
+                    <input
+                      id="post-tags"
+                      value={tagInput}
+                      onChange={(event) => setTagInput(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          addTag();
+                        }
+                      }}
+                      placeholder="e.g. react, javascript"
+                      disabled={tags.length >= 5}
+                      className="h-10 min-w-0 flex-1 rounded-md border border-input bg-background px-3 text-sm outline-none focus:border-ring"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={addTag}
+                      disabled={!tagInput.trim() || tags.length >= 5}
+                      className="rounded-md bg-primary px-3 text-sm text-primary-foreground disabled:opacity-50"
+                    >
+                      Add
+                    </button>
+                  </div>
+                    
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="flex items-center gap-1 rounded-full bg-secondary px-3 py-1 text-xs"
+                      >
+                        #{tag}
+                        <button
+                          type="button"
+                          onClick={() => removeTag(tag)}
+                          className="ml-1 text-muted-foreground hover:text-destructive"
+                          aria-label={`Remove ${tag}`}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Add relevant tags to help readers discover your posts.
+                  </p>
+                </div>
             </div>
           </div>
 

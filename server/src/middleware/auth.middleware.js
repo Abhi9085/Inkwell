@@ -13,7 +13,7 @@ function optionalAuthenticateToken(req, res, next) {
     return next();
   }
 
-  jwt.verify(parts[1], process.env.JWT_SECRET, (err, user) => {
+  jwt.verify(parts[1], process.env.JWT_SECRET, { algorithms: ["HS256"] }, (err, user) => {
     if (!err) {
       req.user = user;
     }
@@ -31,7 +31,7 @@ function authenticateToken(req, res, next) {
   if (parts.length !== 2 || parts[0] !== "Bearer") {
     return res.status(401).json({ error: "Invalid authorization format" });
   }
-  jwt.verify(parts[1], process.env.JWT_SECRET, (err, user) => {
+  jwt.verify(parts[1], process.env.JWT_SECRET, { algorithms: ["HS256"] }, (err, user) => {
     if (err) return res.status(403).json({ error: "Invalid or expired token" });
     req.user = user;
     next();

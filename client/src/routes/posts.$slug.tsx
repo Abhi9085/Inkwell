@@ -25,8 +25,12 @@ export const Route = createFileRoute("/posts/$slug")({
       if (!response.data) throw notFound();
 
       // Also fetch some posts for the "More stories to read" section
-      const allPosts = await api.get('/posts');
-      const related = allPosts.data.filter((p: Post) => p.slug !== params.slug).slice(0, 3);
+      const related = await api.get('/posts/discover', { params: { sort: "trending", limit: 5 } })
+        .then((discovery) => (discovery.data.posts ?? []).filter((p: Post) => p.slug !== params.slug).slice(0, 3))
+        .catch((error) => {
+          console.warn("Related stories are temporarily unavailable:", error);
+          return [] as Post[];
+        });
 
       return { post: response.data, related };
     } catch (error) {

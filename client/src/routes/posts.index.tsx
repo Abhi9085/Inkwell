@@ -1,8 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, Search, SlidersHorizontal } from "lucide-react";
-
-import { Navbar } from "@/components/navbar";
 import { PostCard, PostCardSkeleton } from "@/components/post-card";
 import api from "@/lib/api";
 import type { Post } from "@/lib/types";
@@ -125,7 +123,6 @@ function AllPosts() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar variant="app" />
 
       {/* header */}
       <section className="relative z-30 border-b border-border/60">

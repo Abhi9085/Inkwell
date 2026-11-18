@@ -1,4 +1,5 @@
 import { io } from "socket.io-client";
+import api from "./api";
 
 const socketUrl = (() => {
   if (import.meta.env.VITE_SOCKET_URL) {
@@ -35,6 +36,7 @@ export const socket = io(socketUrl, {
 });
 
 let connectedToken: string | null = null;
+let socketRefreshInFlight = false;
 
 socket.on("connect", () => {
   connectedToken = readAccessToken();
@@ -44,7 +46,25 @@ socket.on("disconnect", () => {
   connectedToken = null;
 });
 
-/** Connect with the latest localStorage token, refreshing stale auth when needed. */
+socket.on("connect_error", async (error) => {
+  if (socketRefreshInFlight || !/unauthorized|expired|token/i.test(error.message)) return;
+  socketRefreshInFlight = true;
+  try {
+    const response = await api.post("/auth/refresh");
+    if (response.data?.token) {
+      localStorage.setItem("token", response.data.token);
+      socket.disconnect();
+      socket.connect();
+    }
+  } catch {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+  } finally {
+    socketRefreshInFlight = false;
+  }
+});
+
+/** Connect with the latest short-lived access token. Expired socket auth is refreshed on connect_error. */
 export function connectSocket() {
   if (typeof window === "undefined") return;
 

@@ -5,11 +5,14 @@ import {
   redirect,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 import { Toaster } from "sonner";
+
+import { Navbar } from "@/components/navbar";
 
 import appCss from "../styles.css?url";
 import { reportError } from "../lib/error-reporting";
@@ -152,8 +155,20 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
+  const pathname = useRouterState({
+    select: (s) => s.location.pathname,
+  });
+
+  const normalizedPath = pathname.replace(/\/+$/, "") || "/";
+
+  const showAppNavbar = ["/home", "/posts", "/library"].includes(
+    normalizedPath
+  );
+
   return (
     <QueryClientProvider client={queryClient}>
+      {showAppNavbar && <Navbar variant="app" />}
+
       <Outlet />
 
       <Toaster

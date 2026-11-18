@@ -168,6 +168,7 @@ function NotificationsPage() {
       );
 
       setUnreadCount((count) => Math.max(0, count - 1));
+      window.dispatchEvent(new Event("notifications-updated"));
     } catch (error) {
       console.error("Failed to mark notification as read:", error);
     }
@@ -185,6 +186,7 @@ function NotificationsPage() {
       );
 
       setUnreadCount(0);
+      window.dispatchEvent(new Event("notifications-updated"));
     } catch (error) {
       console.error("Failed to mark all notifications as read:", error);
     }

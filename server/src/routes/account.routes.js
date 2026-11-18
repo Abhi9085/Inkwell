@@ -1,4 +1,3 @@
-
 module.exports = function registerAccountRoutes(app, deps) {
   const { pool, authenticateToken, deleteFromCloudinary, bcrypt, googleClient } = deps;
 

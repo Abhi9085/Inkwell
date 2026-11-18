@@ -15,6 +15,29 @@ module.exports = function registerPostsRoutes(app, deps) {
     deleteFromCloudinary,
   } = deps;
 
+  const normalizeTags = (rawTags) => {
+    let parsedTags = rawTags;
+
+    if (typeof rawTags === "string") {
+      try {
+        parsedTags = JSON.parse(rawTags);
+      } catch {
+        return [];
+      }
+    }
+
+    if (!Array.isArray(parsedTags)) return [];
+
+    return [
+      ...new Set(
+        parsedTags
+          .filter((tag) => typeof tag === "string")
+          .map((tag) => tag.trim().replace(/^#+/, "").toLowerCase())
+          .filter(Boolean)
+      ),
+    ].slice(0, 5);
+  };
+
 
   app.post("/api/posts/:id/view", authenticateToken, async (req, res) => {
     const postId = Number.parseInt(req.params.id, 10);
@@ -438,27 +461,16 @@ module.exports = function registerPostsRoutes(app, deps) {
     }
   );
 
-  app.post(
-    "/api/posts",
-
-    authenticateToken,
-
-    uploadSingleImage,
-
+  app.post("/api/posts", authenticateToken, uploadSingleImage,
     async (req, res) => {
       const {
         title,
-
         slug,
-
         content,
-
         category,
-
+        tags,
         excerpt,
-
         reading_time,
-
         status,
       } = req.body;
 
@@ -470,6 +482,8 @@ module.exports = function registerPostsRoutes(app, deps) {
 
       try {
         const finalSlug = slug?.trim() ? slugify(slug) : slugify(title);
+
+        const finalTags = normalizeTags(tags);
 
         const finalExcerpt = excerpt?.trim() || generateExcerpt(content);
 
@@ -558,7 +572,7 @@ module.exports = function registerPostsRoutes(app, deps) {
             coverUrl,
             coverPublicId,
             category || "General",
-            [],
+            finalTags,
             readingTime,
             publishedAt,
           ]
@@ -609,7 +623,7 @@ module.exports = function registerPostsRoutes(app, deps) {
 
         if (scheme === "Bearer" && token) {
           try {
-            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ["HS256"] });
             userId = Number(decoded.id);
           } catch {
             userId = null;
@@ -889,7 +903,8 @@ module.exports = function registerPostsRoutes(app, deps) {
             const decoded = jwt.verify(
               parts[1],
 
-              process.env.JWT_SECRET
+              process.env.JWT_SECRET,
+              { algorithms: ["HS256"] }
             );
 
             userId = decoded.id;
@@ -1034,11 +1049,8 @@ module.exports = function registerPostsRoutes(app, deps) {
     }
   });
 
-  app.put(
-    "/api/posts/:id",
-
+  app.put("/api/posts/:id",
     authenticateToken,
-
     uploadSingleImage,
 
     async (req, res) => {
@@ -1046,32 +1058,22 @@ module.exports = function registerPostsRoutes(app, deps) {
 
       const {
         title,
-
         slug,
-
         content,
-
         category,
-
+        tags,
         excerpt,
-
         reading_time,
-
         status,
       } = req.body;
 
       try {
         const postCheck = await pool.query(
           `
-  
           SELECT *
-  
           FROM posts
-  
           WHERE id = $1
-  
           `,
-
           [id]
         );
 
@@ -1097,6 +1099,11 @@ module.exports = function registerPostsRoutes(app, deps) {
         const finalContent = content ?? existingPost.content;
 
         const finalCategory = category ?? existingPost.category ?? "General";
+
+        const finalTags =
+          tags !== undefined
+            ? normalizeTags(tags)
+            : existingPost.tags ?? [];
 
         const finalExcerpt =
           excerpt?.trim() ||
@@ -1154,18 +1161,20 @@ module.exports = function registerPostsRoutes(app, deps) {
             slug = $2,
             content = $3,
             category = $4,
-            excerpt = $5,
-            reading_time = $6,
-            cover = $7,
-            cover_public_id = $8,
-            published_at = $9
-          WHERE id = $10
+            tags = $5,
+            excerpt = $6,
+            reading_time = $7,
+            cover = $8,
+            cover_public_id = $9,
+            published_at = $10
+          WHERE id = $11
           `,
           [
             finalTitle,
             finalSlug,
             finalContent,
             finalCategory,
+            finalTags,
             finalExcerpt,
             finalReadingTime,
             finalCover,

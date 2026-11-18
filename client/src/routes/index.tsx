@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronDown, Search, SlidersHorizontal } from "lucide-react";
 import { Navbar } from "@/components/navbar";
 import { PostCard, PostCardSkeleton } from "@/components/post-card";
@@ -14,6 +14,8 @@ const sorts = ["Most recent", "Most read", "Most liked", "Trending"];
 
 function AllPosts() {
   const [posts, setPosts] = useState<any[]>([]);
+  const [categories, setCategories] = useState<string[]>(["All"]);
+  const [totalPages, setTotalPages] = useState(1);
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("All");
   const [sort, setSort] = useState(sorts[0]);
@@ -22,97 +24,52 @@ function AllPosts() {
 
   const perPage = 9;
 
-  // Fetch real posts from backend
+  // Load category options once; the feed itself is server-paginated.
   useEffect(() => {
-    const fetchPosts = async () => {
-      try {
-        const response = await api.get("/posts");
-        setPosts(
-          (response.data || []).filter(
-            (post: any) =>
-              post.status === "Public" &&
-              post.publishedAt !== null
-          )
-        );
-      } catch (error) {
-        console.error("Failed to fetch posts:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchPosts();
+    let active = true;
+    api.get("/discovery/categories")
+      .then((response) => {
+        if (active) setCategories(["All", ...(response.data.categories ?? [])]);
+      })
+      .catch((error) => console.warn("Could not load discovery categories:", error));
+    return () => { active = false; };
   }, []);
 
-  // Create category list from real backend posts
-  const categories = useMemo(() => {
-    const uniqueCategories = [
-      ...new Set(posts.map((post) => post.category).filter(Boolean)),
-    ];
-
-    return ["All", ...uniqueCategories];
-  }, [posts]);
-
-  const filtered = useMemo(() => {
-    let list = [...posts];
-
-    // Category filter
-    if (cat !== "All") {
-      list = list.filter((p) => p.category === cat);
-    }
-
-    // Search
-    if (q.trim()) {
-      const search = q.toLowerCase();
-
-      list = list.filter(
-        (p) =>
-          p.title?.toLowerCase().includes(search) ||
-          p.excerpt?.toLowerCase().includes(search) ||
-          p.category?.toLowerCase().includes(search) ||
-          p.author?.name?.toLowerCase().includes(search)
-      );
-    }
-
-    // Sorting
-    if (sort === "Most liked") {
-      list.sort((a, b) => (b.likes || 0) - (a.likes || 0));
-    }
-
-    if (sort === "Most read") {
-      list.sort((a, b) => (b.views || 0) - (a.views || 0));
-    }
-
-    if (sort === "Trending") {
-      list.sort((a, b) => {
-        if (a.trending !== b.trending) {
-          return a.trending ? -1 : 1;
+  // Server-side filtering, ranking and pagination keep the browser payload bounded.
+  useEffect(() => {
+    let active = true;
+    const timer = window.setTimeout(async () => {
+      setLoading(true);
+      const sortMap: Record<string, string> = {
+        "Most recent": "latest",
+        "Most read": "most-read",
+        "Most liked": "most-liked",
+        Trending: "trending",
+      };
+      try {
+        const response = await api.get("/posts/discover", {
+          params: {
+            page,
+            limit: perPage,
+            category: cat === "All" ? "" : cat,
+            q: q.trim(),
+            sort: sortMap[sort] || "latest",
+          },
+        });
+        if (!active) return;
+        setPosts(response.data.posts ?? []);
+        setTotalPages(Math.max(1, Math.ceil((Number(response.data.total) || 0) / perPage)));
+      } catch (error) {
+        if (active) {
+          console.error("Failed to fetch discovery feed:", error);
+          setPosts([]);
         }
-
-        return (b.views || 0) - (a.views || 0);
-      });
-    }
-
-    if (sort === "Most recent") {
-      list.sort(
-        (a, b) =>
-          new Date(b.publishedAt || b.createdAt).getTime() -
-          new Date(a.publishedAt || a.createdAt).getTime()
-      );
-    }
-
-    return list;
-  }, [posts, q, cat, sort]);
-
-  const paged = filtered.slice(
-    (page - 1) * perPage,
-    page * perPage
-  );
-
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filtered.length / perPage)
-  );
+      } finally {
+        if (active) setLoading(false);
+      }
+    }, q.trim() ? 300 : 0);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [page, cat, sort, q]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -184,7 +141,7 @@ function AllPosts() {
               <PostCardSkeleton key={i} />
             ))}
           </div>
-        ) : filtered.length === 0 ? (
+        ) : posts.length === 0 ? (
           <EmptyResults
             query={q}
             onReset={() => {
@@ -196,7 +153,7 @@ function AllPosts() {
         ) : (
           <>
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {paged.map((post) => (
+              {posts.map((post) => (
                 <PostCard key={post.id} post={post} />
               ))}
             </div>

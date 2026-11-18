@@ -18,12 +18,19 @@ const refreshCookieOptions = () => ({
   httpOnly: true,
   secure: process.env.NODE_ENV === "production",
   sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+  partitioned: process.env.NODE_ENV === "production",
   path: "/api/auth",
   maxAge: 30 * 24 * 60 * 60 * 1000,
 });
-const clearRefreshCookie = (res) => res.clearCookie("inkwell_refresh", {
-  httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: process.env.NODE_ENV === "production" ? "none" : "lax", path: "/api/auth",
-});
+
+const clearRefreshCookie = (res) =>
+  res.clearCookie("inkwell_refresh", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    partitioned: process.env.NODE_ENV === "production",
+    path: "/api/auth",
+  });
 module.exports = function registerAuthRoutes(app, deps) {
   const {
     pool,

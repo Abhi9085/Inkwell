@@ -38,6 +38,7 @@ uploads/*
 *.sqlite
 *.sqlite3
 *.db
+*.dump
 
 # OS files
 .DS_Store

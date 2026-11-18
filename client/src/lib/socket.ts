@@ -24,6 +24,7 @@ const readAccessToken = () => {
 
 export const socket = io(socketUrl, {
   autoConnect: false,
+  transports: ["websocket"],
   withCredentials: true,
   auth: (callback) => {
     const token = readAccessToken();

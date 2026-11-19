@@ -2,15 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 import {
-  Bold,
-  Code,
   Eye,
-  Heading2,
-  Image as ImageIcon,
-  Italic,
-  Link2,
-  List,
-  Quote,
   Save,
   Upload,
   Pencil,
@@ -18,6 +10,8 @@ import {
 
 import { Navbar } from "@/components/navbar";
 import api from "../lib/api";
+
+import RichTextEditor from "@/components/post/rich-text-editor";
 
 export const Route = createFileRoute("/create")({
   head: () => ({ meta: [{ title: "New story — Inkwell" }] }),
@@ -253,17 +247,6 @@ export function PostEditor({ mode, postId, initial, lastSavedAt }: PostEditorPro
     else insertMarkdown("![", `](${parsed.href})`, "image description");
   };
 
-  const editorTools = [
-    { icon: Bold, label: "Bold", action: () => insertMarkdown("**", "**", "bold text") },
-    { icon: Italic, label: "Italic", action: () => insertMarkdown("*", "*", "italic text") },
-    { icon: Heading2, label: "Heading", action: () => insertLinePrefix("## ") },
-    { icon: Quote, label: "Quote", action: () => insertLinePrefix("> ") },
-    { icon: List, label: "List", action: () => insertLinePrefix("- ") },
-    { icon: Code, label: "Code", action: () => insertMarkdown("`", "`", "code") },
-    { icon: Link2, label: "Link", action: () => askForUrl("link") },
-    { icon: ImageIcon, label: "Image", action: () => askForUrl("image") },
-  ];
-
   const handleImageChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -288,7 +271,14 @@ export function PostEditor({ mode, postId, initial, lastSavedAt }: PostEditorPro
     const generatedSlug = mode === "edit" && initial?.slug
       ? initial.slug
       : title.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || `post-${Date.now()}`;
-    const generatedExcerpt = body.replace(/[#*_>`]/g, "").replace(/\s+/g, " ").trim().slice(0, 140);
+    const generatedExcerpt = body
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, " ") // Remove images and image URLs
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1") // Keep link text only
+      .replace(/```[\s\S]*?```/g, " ") // Remove code blocks
+      .replace(/[#*_>`~]/g, "") // Remove Markdown formatting
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 140);
     formData.append("title", title.trim());
     formData.append("content", body);
     formData.append("category", category);
@@ -360,23 +350,19 @@ export function PostEditor({ mode, postId, initial, lastSavedAt }: PostEditorPro
         <section className="min-w-0">
           <input value={title} onChange={(event) => { setTitle(event.target.value); setDirty(true); }} placeholder="Give your story a title" className="w-full bg-transparent text-4xl font-semibold tracking-tight text-foreground outline-none placeholder:text-muted-foreground/60 md:text-5xl" />
 
-          <div className="mt-6 flex flex-wrap gap-0.5 rounded-lg border border-border bg-card p-1 shadow-soft">
-            {editorTools.map(({ icon: Icon, label, action }) => (
-              <button key={label} type="button" onClick={action} title={label} aria-label={label} disabled={isPreview} className="grid h-9 w-9 place-items-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-40">
-                <Icon className="h-4 w-4" />
-              </button>
-            ))}
-            <span className="mx-1 h-9 w-px bg-border" />
-            <span className="grid h-9 place-items-center px-2 text-xs text-muted-foreground">Markdown tools</span>
-          </div>
-
           {isPreview ? (
             <article className="prose prose-neutral dark:prose-invert mt-4 min-h-[500px] max-w-none rounded-lg border border-border bg-card p-6">
               <h1>{title || "Untitled story"}</h1>
               <MarkdownPreview content={body} />
             </article>
           ) : (
-            <textarea ref={bodyTextareaRef} value={body} onChange={(event) => { setBody(event.target.value); setDirty(true); }} placeholder="Start writing your story using Markdown..." spellCheck className="mt-4 min-h-[500px] w-full resize-y rounded-lg border border-border bg-card p-6 font-mono text-[15px] leading-[1.8] outline-none focus:border-ring focus:ring-4 focus:ring-ring/15" />
+            <RichTextEditor
+              value={body}
+              onChange={(updatedBody) => {
+                setBody(updatedBody);
+                setDirty(true);
+              }}
+            />
           )}
           <p className="mt-3 text-xs text-muted-foreground">{words} words · {readTime} min read</p>
         </section>

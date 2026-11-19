@@ -8,6 +8,7 @@ import {
   useRouterState,
   HeadContent,
   Scripts,
+  type ErrorComponentProps,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 import { Toaster } from "sonner";
@@ -45,23 +46,35 @@ function NotFoundComponent() {
   );
 }
 
-function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
-  console.error(error);
+function ErrorComponent({ error, reset }: ErrorComponentProps) {
   const router = useRouter();
+
+  const normalizedError =
+    error instanceof Error ? error : new Error(String(error));
+
+  console.error(normalizedError);
+
   useEffect(() => {
-    reportError(error, { boundary: "tanstack_root_error_component" });
-  }, [error]);
+    reportError(normalizedError, {
+      boundary: "tanstack_root_error_component",
+    });
+  }, [normalizedError]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-hero-gradient px-4">
       <div className="max-w-md text-center">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-destructive">Error 500</p>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-destructive">
+          Error 500
+        </p>
+
         <h1 className="mt-4 text-3xl font-semibold tracking-tight text-foreground">
           Something went wrong on our end
         </h1>
+
         <p className="mt-3 text-sm text-muted-foreground">
           A temporary hiccup. Try again, or head back home while we look into it.
         </p>
+
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
             onClick={() => {
@@ -72,6 +85,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
           >
             Try again
           </button>
+
           <a
             href="/"
             className="inline-flex h-10 items-center rounded-md border border-border bg-background px-4 text-sm font-medium text-foreground hover:bg-secondary"

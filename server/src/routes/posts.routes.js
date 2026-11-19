@@ -955,136 +955,63 @@ module.exports = function registerPostsRoutes(app, deps) {
     }
   );
 
-  app.get("/api/posts/:slug", async (req, res) => {
+  app.get("/api/posts/:slug", authenticateToken.optionalAuthenticateToken, async (req, res) => {
     const { slug } = req.params;
 
     try {
       // ------------------------------------------
-
       // Get current user if logged in
+      // ------------------------------------------
+      const userId = req.user?.id ?? null;
 
       // ------------------------------------------
-
-      let userId = null;
-
-      const authHeader = req.headers.authorization;
-
-      if (authHeader) {
-        const parts = authHeader.split(" ");
-
-        if (parts.length === 2 && parts[0] === "Bearer") {
-          try {
-            const decoded = jwt.verify(
-              parts[1],
-
-              process.env.JWT_SECRET,
-              { algorithms: ["HS256"] }
-            );
-
-            userId = decoded.id;
-          } catch {
-            // Invalid/expired token:
-
-            // treat visitor as logged out
-
-            userId = null;
-          }
-        }
-      }
-
-      // ------------------------------------------
-
       // Get post + like status
-
       // ------------------------------------------
 
       const result = await pool.query(
         `
-  
         SELECT
-  
           p.id,
-  
           p.title,
-  
           p.slug,
-  
           p.excerpt,
-  
           p.content,
-  
           p.cover,
   
-  
-  
-          COALESCE(p.category, 'General') AS category,
-  
+          COALESCE(p.category, 'General') AS category,  
           COALESCE(p.tags, ARRAY[]::text[]) AS tags,
-  
           COALESCE(p.reading_time, 0) AS "readingTime",
-  
           COALESCE(p.likes, 0) AS likes,
-  
           COALESCE(p.views, 0) AS views,
-  
           COALESCE(p.is_featured, false) AS featured,
-  
           COALESCE(p.is_trending, false) AS trending,
   
-  
-  
           CASE
-  
             WHEN p.published_at IS NULL THEN 'Draft'
-  
             ELSE 'Public'
-  
           END AS status,
   
-  
-  
           p.published_at AS "publishedAt",
-  
           p.created_at AS "createdAt",
   
-  
-  
           EXISTS (
-  
             SELECT 1
-  
             FROM post_likes pl
-  
             WHERE pl.post_id = p.id
-  
               AND pl.user_id = $2
-  
           ) AS "likedByMe",
   
-  
-  
           json_build_object(
-  
             'id', u.id,
-  
             'name', u.name,
-  
             'handle', u.handle,
-  
             'avatar', u.avatar,
-  
             'bio', COALESCE(u.bio, ''),
-  
             'role', COALESCE(u.role, 'Writer')
-  
           ) AS author
-  
-  
-  
-        FROM posts p
-  
+
+        FROM posts p  
         JOIN users u ON p.user_id = u.id
-  
     
         WHERE p.slug = $1
           AND (
@@ -1208,9 +1135,7 @@ module.exports = function registerPostsRoutes(app, deps) {
         }
 
         // ------------------------------------------
-
         // Published date
-
         // ------------------------------------------
 
         let publishedAt = existingPost.published_at;
@@ -1221,7 +1146,6 @@ module.exports = function registerPostsRoutes(app, deps) {
 
         if (status === "Public") {
           // If already published, keep the original
-
           // publication date.
 
           if (!existingPost.published_at) {

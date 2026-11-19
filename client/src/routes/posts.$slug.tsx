@@ -19,23 +19,44 @@ import { usePostViews } from "@/hooks/use-post-views";
 import { useReadingProgress } from "@/hooks/use-reading-progress";
 
 export const Route = createFileRoute("/posts/$slug")({
+  ssr: false,
   loader: async ({ params }) => {
+    let response;
+  
     try {
-      const response = await api.get(`/posts/${params.slug}`);
-      if (!response.data) throw notFound();
-
-      // Also fetch some posts for the "More stories to read" section
-      const related = await api.get('/posts/discover', { params: { sort: "trending", limit: 5 } })
-        .then((discovery) => (discovery.data.posts ?? []).filter((p: Post) => p.slug !== params.slug).slice(0, 3))
-        .catch((error) => {
-          console.warn("Related stories are temporarily unavailable:", error);
-          return [] as Post[];
-        });
-
-      return { post: response.data, related };
+      response = await api.get(`/posts/${params.slug}`);
     } catch (error) {
+      const status = (
+        error as { response?: { status?: number } }
+      )?.response?.status;
+    
+      if ([401, 403, 404].includes(status ?? 0)) {
+        throw notFound();
+      }
+    
+      // Unexpected errors should reach the error component.
+      throw error;
+    }
+  
+    if (!response.data) {
       throw notFound();
     }
+  
+    const related = await api
+      .get("/posts/discover", {
+        params: { sort: "trending", limit: 5 },
+      })
+      .then((discovery) =>
+        (discovery.data.posts ?? [])
+          .filter((p: Post) => p.slug !== params.slug)
+          .slice(0, 3)
+      )
+      .catch((error) => {
+        console.warn("Related stories are temporarily unavailable:", error);
+        return [] as Post[];
+      });
+    
+    return { post: response.data, related };
   },
 
   head: ({ loaderData }) =>
@@ -49,7 +70,7 @@ export const Route = createFileRoute("/posts/$slug")({
           { property: "og:image", content: loaderData.post.cover },
         ],
       }
-      : { meta: [{ title: "Story not found" }, { name: "robots", content: "noindex" }] },
+      : { meta: [{ title: "Loading story... — Inkwell" }, { name: "robots", content: "noindex" }] },
   notFoundComponent: PostNotFound,
   component: PostPage,
 });

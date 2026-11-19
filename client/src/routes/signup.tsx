@@ -61,8 +61,11 @@ function SignupPage() {
         password: formData.password
       });
 
-      toast.success("Welcome to Inkwell!", { description: "Your account is ready." });
-      navigate({ to: '/login' });
+      toast.success("Verification email sent!", {
+        description: "Please check your inbox and verify your email before logging in.",
+      });
+
+      navigate({ to: "/login" });
     } catch (err: any) {
       toast.error(err.response?.data?.error || "Failed to create account");
     } finally {
@@ -171,7 +174,7 @@ function SignupPage() {
                 name="password"
                 value={formData.password}
                 onChange={handleChange}
-                placeholder="At least 8 characters"
+                placeholder="At least 12 characters"
                 className="h-11 w-full rounded-lg border border-input bg-background pl-10 pr-3 text-sm outline-none transition-all focus:border-ring focus:ring-4 focus:ring-ring/15" 
               />
             </Field>

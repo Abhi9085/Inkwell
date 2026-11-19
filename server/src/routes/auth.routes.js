@@ -58,6 +58,7 @@ module.exports = function registerAuthRoutes(app, deps) {
     return accessToken;
   };
 
+
   app.post("/api/auth/register", async (req, res) => {
     const { name, handle, password } = req.body || {};
     const email = normalizeEmail(req.body?.email);
@@ -68,17 +69,34 @@ module.exports = function registerAuthRoutes(app, deps) {
       });
     }
 
-    if (typeof name !== "string" || name.trim().length < 2 || name.trim().length > 80 ||
-        typeof handle !== "string" || !/^[a-zA-Z0-9_]{3,30}$/.test(handle) ||
-        !EMAIL_RE.test(email) || email.length > 254 ||
-        typeof password !== "string" || password.length < 12 || password.length > 72 ||
-        !/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/[0-9]/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
-      return res.status(400).json({ error: "Use a valid name, a 3–30 character handle, a valid email, and a password of 12–72 characters containing uppercase, lowercase, number and symbol." });
+    if (
+      typeof name !== "string" ||
+      name.trim().length < 2 ||
+      name.trim().length > 80 ||
+      typeof handle !== "string" ||
+      !/^[a-zA-Z0-9_]{3,30}$/.test(handle) ||
+      !EMAIL_RE.test(email) ||
+      email.length > 254 ||
+      typeof password !== "string" ||
+      password.length < 12 ||
+      password.length > 72 ||
+      !/[a-z]/.test(password) ||
+      !/[A-Z]/.test(password) ||
+      !/[0-9]/.test(password) ||
+      !/[^A-Za-z0-9]/.test(password)
+    ) {
+      return res.status(400).json({
+        error:
+          "Use a valid name, a 3–30 character handle, a valid email, and a password of 12–72 characters containing uppercase, lowercase, number and symbol.",
+      });
     }
+
+    let client;
 
     try {
       const existingUser = await pool.query(
-        `SELECT id FROM users WHERE LOWER(email) = $1 OR LOWER(handle) = LOWER($2)`,
+        `SELECT id FROM users
+         WHERE LOWER(email) = $1 OR LOWER(handle) = LOWER($2)`,
         [email, handle]
       );
 
@@ -90,35 +108,97 @@ module.exports = function registerAuthRoutes(app, deps) {
 
       const hashedPassword = await bcrypt.hash(password, 12);
 
-      const newUser = await pool.query(
-        `
-        INSERT INTO users
-          (name, handle, email, password_hash, has_password)
-        VALUES
-          ($1, $2, $3, $4, TRUE)
-        RETURNING
-          id,
-          name,
-          handle,
-          email,
-          avatar,
-          bio,
-          role
-        `,
-        [name, handle, email, hashedPassword]
+      // Generate a secure, single-use verification token.
+      const rawToken = crypto.randomBytes(32).toString("hex");
+
+      const tokenHash = crypto
+        .createHash("sha256")
+        .update(rawToken)
+        .digest("hex");
+
+      client = await pool.connect();
+      await client.query("BEGIN");
+
+      const newUser = await client.query(
+        `INSERT INTO users
+          (name, handle, email, password_hash, has_password, is_email_verified)
+         VALUES ($1, $2, $3, $4, TRUE, FALSE)
+         RETURNING id`,
+        [name.trim(), handle, email, hashedPassword]
       );
 
-      res.status(201).json({
-        message: "Registration successful",
-        user: newUser.rows[0],
+      const userId = newUser.rows[0].id;
+
+      await client.query(
+        `INSERT INTO email_verification_tokens
+          (user_id, token_hash, expires_at)
+         VALUES ($1, $2, NOW() + INTERVAL '15 minutes')`,
+        [userId, tokenHash]
+      );
+
+      await client.query("COMMIT");
+      client.release();
+      client = null;
+
+      const verificationUrl =
+        `${process.env.CLIENT_URL}/verify-email?token=${rawToken}`;
+
+      await mailer.sendMail({
+        from: process.env.SMTP_FROM,
+        to: email,
+        subject: "Verify your Inkwell email address",
+        text: [
+          "Welcome to Inkwell!",
+          "",
+          "Please verify your email address using this link:",
+          verificationUrl,
+          "",
+          "This link expires in 15 minutes and can only be used once.",
+          "If you didn't create this account, you can ignore this email.",
+        ].join("\n"),
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:560px;margin:auto">
+            <h2>Welcome to Inkwell!</h2>
+            <p>Please verify your email address to activate your account.</p>
+            <p>
+              <a href="${verificationUrl}"
+                 style="display:inline-block;padding:12px 20px;
+                        background:#222;color:#fff;text-decoration:none;
+                        border-radius:8px">
+                Verify email address
+              </a>
+            </p>
+            <p>This link expires in 15 minutes and can only be used once.</p>
+            <p>If you didn't create this account, you can ignore this email.</p>
+          </div>
+        `,
+      });
+
+      return res.status(201).json({
+        message: "Account created. Please check your email to verify your account.",
+        verificationRequired: true,
       });
     } catch (error) {
+      if (client) {
+        await client.query("ROLLBACK").catch(() => {});
+      }
+
       console.error("Register error:", error);
-      res.status(500).json({
-        error: "Failed to register user",
+
+      if (error.code === "23505") {
+        return res.status(409).json({
+          error: "Email or handle already exists",
+        });
+      }
+
+      return res.status(500).json({
+        error: "Unable to complete registration. Please try again.",
       });
+    } finally {
+      client?.release();
     }
   });
+
 
   app.post("/api/auth/login", async (req, res) => {
     const email = normalizeEmail(req.body?.email);
@@ -141,7 +221,8 @@ module.exports = function registerAuthRoutes(app, deps) {
           password_hash,
           avatar,
           bio,
-          role
+          role,
+          is_email_verified
         FROM users
         WHERE LOWER(email) = $1
         `,
@@ -164,6 +245,13 @@ module.exports = function registerAuthRoutes(app, deps) {
       if (!validPassword) {
         return res.status(401).json({
           error: "Invalid email or password",
+        });
+      }
+
+      if (!user.is_email_verified) {
+        return res.status(403).json({
+          error: "Please verify your email before logging in.",
+          code: "EMAIL_NOT_VERIFIED",
         });
       }
 
@@ -815,4 +903,86 @@ module.exports = function registerAuthRoutes(app, deps) {
       }
     }
   );
+  // ------------------------------------------
+  // Verify email
+  // ------------------------------------------
+  app.post("/api/auth/verify-email", async (req, res) => {
+    const rawToken = req.body?.token;
+  
+    if (typeof rawToken !== "string" || !rawToken) {
+      return res.status(400).json({
+        error: "Verification token is required",
+      });
+    }
+  
+    const tokenHash = crypto
+      .createHash("sha256")
+      .update(rawToken)
+      .digest("hex");
+  
+    let client;
+  
+    try {
+      client = await pool.connect();
+      await client.query("BEGIN");
+    
+      const tokenResult = await client.query(
+        `
+        SELECT id, user_id
+        FROM email_verification_tokens
+        WHERE token_hash = $1
+          AND used_at IS NULL
+          AND expires_at > NOW()
+        FOR UPDATE
+        `,
+        [tokenHash]
+      );
+    
+      if (tokenResult.rows.length === 0) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({
+          error: "Invalid or expired verification link",
+        });
+      }
+    
+      const verificationToken = tokenResult.rows[0];
+    
+      await client.query(
+        `
+        UPDATE users
+        SET is_email_verified = TRUE
+        WHERE id = $1
+        `,
+        [verificationToken.user_id]
+      );
+    
+      await client.query(
+        `
+        UPDATE email_verification_tokens
+        SET used_at = NOW()
+        WHERE user_id = $1
+          AND used_at IS NULL
+        `,
+        [verificationToken.user_id]
+      );
+    
+      await client.query("COMMIT");
+    
+      return res.json({
+        message: "Email verified successfully. You can now log in.",
+      });
+    } catch (error) {
+      if (client) {
+        await client.query("ROLLBACK").catch(() => {});
+      }
+    
+      console.error("Email verification error:", error);
+    
+      return res.status(500).json({
+        error: "Failed to verify email",
+      });
+    } finally {
+      client?.release();
+    }
+  });
 };

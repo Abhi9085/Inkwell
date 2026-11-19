@@ -140,6 +140,43 @@
   --gradient-shine: linear-gradient(135deg, oklch(0.7 0.17 265), oklch(0.6 0.16 200));
 }
 
+/* Tiptap editor formatting */
+.tiptap ul {
+  list-style-type: disc !important;
+  padding-left: 1.5rem;
+  margin: 1rem 0;
+}
+
+.tiptap ol {
+  list-style-type: decimal !important;
+  padding-left: 1.5rem;
+  margin: 1rem 0;
+}
+
+.tiptap li {
+  display: list-item;
+  margin: 0.25rem 0;
+}
+
+.tiptap blockquote {
+  border-left: 4px solid var(--border);
+  padding-left: 1rem;
+  margin: 1rem 0;
+  font-style: italic;
+}
+
+.tiptap pre {
+  background: var(--secondary);
+  color: var(--foreground);
+  padding: 1rem;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+}
+
+.tiptap code {
+  font-family: var(--font-mono);
+}
+
 @utility bg-hero-gradient {
   background-image: var(--gradient-hero);
 }

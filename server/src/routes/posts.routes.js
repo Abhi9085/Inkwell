@@ -1,5 +1,39 @@
 const { emitProfileStats } = require("../utils/profile-stats.utils");
 const { canViewProfile, canViewPost } = require("../utils/privacy.utils");
+
+
+function cleanPostExcerpt(text = "") {
+  return text
+    // Remove Markdown images
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+
+    // Remove HTML images
+    .replace(/<img\b[^>]*>/gi, " ")
+
+    // Remove fenced code blocks
+    .replace(/```[\s\S]*?```/g, " ")
+
+    // Keep link text, remove URL
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+
+    // Remove horizontal rules
+    .replace(/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/gm, " ")
+
+    // Remove heading, quote and list markers
+    .replace(/^\s{0,3}(?:#{1,6}\s+|>\s?|[-*+]\s+|\d+[.)]\s+)/gm, "")
+
+    // Remove inline Markdown formatting
+    .replace(/(\*\*|__)(.*?)\1/g, "$2")
+    .replace(/([*_~])([^*_~]+)\1/g, "$2")
+    .replace(/`([^`]+)`/g, "$1")
+
+    // Clean remaining whitespace
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 140);
+}
+
+
 // Routes for posts. Keep route handlers in this feature module.
 module.exports = function registerPostsRoutes(app, deps) {
   const {
@@ -461,6 +495,44 @@ module.exports = function registerPostsRoutes(app, deps) {
     }
   );
 
+  app.post(
+    "/api/posts/inline-image",
+    authenticateToken,
+    uploadSingleImage,
+    async (req, res) => {
+      try {
+        if (!req.file) {
+          return res.status(400).json({ error: "Please select an image." });
+        }
+      
+        const allowedTypes = [
+          "image/jpeg",
+          "image/png",
+          "image/webp",
+        ];
+      
+        if (!allowedTypes.includes(req.file.mimetype)) {
+          return res.status(400).json({
+            error: "Only JPG, PNG and WebP images are supported.",
+          });
+        }
+      
+        const result = await uploadToCloudinary(req.file.buffer);
+      
+        return res.status(201).json({
+          url: result.secure_url,
+          publicId: result.public_id,
+        });
+      } catch (error) {
+        console.error("Inline image upload error:", error);
+      
+        return res.status(500).json({
+          error: "Failed to upload inline image.",
+        });
+      }
+    }
+  );
+
   app.post("/api/posts", authenticateToken, uploadSingleImage,
     async (req, res) => {
       const {
@@ -485,7 +557,9 @@ module.exports = function registerPostsRoutes(app, deps) {
 
         const finalTags = normalizeTags(tags);
 
-        const finalExcerpt = excerpt?.trim() || generateExcerpt(content);
+        const finalExcerpt = cleanPostExcerpt(
+          excerpt?.trim() || generateExcerpt(content)
+        );
 
         const parsedReadingTime = Number.parseInt(
           reading_time,
@@ -1105,10 +1179,12 @@ module.exports = function registerPostsRoutes(app, deps) {
             ? normalizeTags(tags)
             : existingPost.tags ?? [];
 
-        const finalExcerpt =
+        const finalExcerpt = cleanPostExcerpt(
           excerpt?.trim() ||
           generateExcerpt(finalContent) ||
-          existingPost.excerpt;
+          existingPost.excerpt ||
+          ""
+        );
 
         const parsedReadingTime =
           reading_time !== undefined

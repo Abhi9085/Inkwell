@@ -21,7 +21,6 @@ import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as RouteCheckRouteImport } from './routes/route-check'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as SignupRouteImport } from './routes/signup'
-import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as EditSlugRouteImport } from './routes/edit.$slug'
 import { Route as PostsIndexRouteImport } from './routes/posts.index'
 import { Route as PostsSlugRouteImport } from './routes/posts.$slug'
@@ -91,11 +90,6 @@ const SignupRoute = SignupRouteImport.update({
   path: '/signup',
   getParentRoute: () => rootRouteImport,
 } as any)
-const VerifyEmailRoute = VerifyEmailRouteImport.update({
-  id: '/verify-email',
-  path: '/verify-email',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const EditSlugRoute = EditSlugRouteImport.update({
   id: '/edit/$slug',
   path: '/edit/$slug',
@@ -150,7 +144,6 @@ export interface FileRoutesByFullPath {
   '/route-check': typeof RouteCheckRoute
   '/search': typeof SearchRoute
   '/signup': typeof SignupRoute
-  '/verify-email': typeof VerifyEmailRoute
   '/edit/$slug': typeof EditSlugRoute
   '/posts/$slug': typeof PostsSlugRoute
   '/profile/blocked': typeof ProfileBlockedRoute
@@ -172,7 +165,6 @@ export interface FileRoutesByTo {
   '/route-check': typeof RouteCheckRoute
   '/search': typeof SearchRoute
   '/signup': typeof SignupRoute
-  '/verify-email': typeof VerifyEmailRoute
   '/edit/$slug': typeof EditSlugRoute
   '/posts/$slug': typeof PostsSlugRoute
   '/profile/blocked': typeof ProfileBlockedRoute
@@ -196,7 +188,6 @@ export interface FileRoutesById {
   '/route-check': typeof RouteCheckRoute
   '/search': typeof SearchRoute
   '/signup': typeof SignupRoute
-  '/verify-email': typeof VerifyEmailRoute
   '/edit/$slug': typeof EditSlugRoute
   '/posts/$slug': typeof PostsSlugRoute
   '/profile/blocked': typeof ProfileBlockedRoute
@@ -221,7 +212,6 @@ export interface FileRouteTypes {
     | '/route-check'
     | '/search'
     | '/signup'
-    | '/verify-email'
     | '/edit/$slug'
     | '/posts/$slug'
     | '/profile/blocked'
@@ -243,7 +233,6 @@ export interface FileRouteTypes {
     | '/route-check'
     | '/search'
     | '/signup'
-    | '/verify-email'
     | '/edit/$slug'
     | '/posts/$slug'
     | '/profile/blocked'
@@ -266,7 +255,6 @@ export interface FileRouteTypes {
     | '/route-check'
     | '/search'
     | '/signup'
-    | '/verify-email'
     | '/edit/$slug'
     | '/posts/$slug'
     | '/profile/blocked'
@@ -290,7 +278,6 @@ export interface RootRouteChildren {
   RouteCheckRoute: typeof RouteCheckRoute
   SearchRoute: typeof SearchRoute
   SignupRoute: typeof SignupRoute
-  VerifyEmailRoute: typeof VerifyEmailRoute
   EditSlugRoute: typeof EditSlugRoute
   PostsSlugRoute: typeof PostsSlugRoute
   PostsIndexRoute: typeof PostsIndexRoute
@@ -380,13 +367,6 @@ declare module '@tanstack/react-router' {
       path: '/signup'
       fullPath: '/signup'
       preLoaderRoute: typeof SignupRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/verify-email': {
-      id: '/verify-email'
-      path: '/verify-email'
-      fullPath: '/verify-email'
-      preLoaderRoute: typeof VerifyEmailRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/edit/$slug': {
@@ -480,7 +460,6 @@ const rootRouteChildren: RootRouteChildren = {
   RouteCheckRoute: RouteCheckRoute,
   SearchRoute: SearchRoute,
   SignupRoute: SignupRoute,
-  VerifyEmailRoute: VerifyEmailRoute,
   EditSlugRoute: EditSlugRoute,
   PostsSlugRoute: PostsSlugRoute,
   PostsIndexRoute: PostsIndexRoute,

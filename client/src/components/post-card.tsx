@@ -189,7 +189,9 @@ export function PostCard({
 
             <span className="inline-flex items-center gap-1">
               <Eye className="h-3 w-3" />
-              {(post.views / 1000).toFixed(1)}k
+              {post.views >= 1000
+                ? `${(post.views / 1000).toFixed(1)}k`
+                : post.views.toLocaleString()}
             </span>
           </div>
         </div>
